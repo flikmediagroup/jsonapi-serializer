@@ -57,6 +57,21 @@ describe('Options', function () {
       expect(json.data).to.not.have.keys('id');
       done(null, json);
     });
+
+    it('should be a string', function (done) {
+      var dataSet = {
+        id: 123,
+        firstName: 'Sandro',
+        lastName: 'Munda'
+      };
+
+      var json = new JSONAPISerializer('user', {
+        attributes: ['firstName', 'lastName'],
+      }).serialize(dataSet);
+
+      expect(json.data.id).to.equal('123');
+      done(null, json);
+    });
   });
 
   describe('pluralizeType', function () {
@@ -311,6 +326,27 @@ describe('Options', function () {
 
       expect(json.data[0].meta.count).equal(2);
       expect(json.data[1].meta.count).equal(1);
+      done(null, json);
+    });
+
+    it('should set the meta according to the func return', function (done) {
+      var dataSet = [{
+        id: '54735750e16638ba1eee59cb',
+        firstName: 'Sandro',
+        lastName: 'Munda'
+      }, {
+        id: '5490143e69e49d0c8f9fc6bc',
+        firstName: 'Lawrence',
+        lastName: 'Bennett'
+      }];
+
+      var json = new JSONAPISerializer('user', {
+        attributes: ['firstName', 'lastName'],
+        dataMeta: function (record) { return { copyright: record.firstName + ' ' + record.lastName }; } 
+      }).serialize(dataSet);
+
+      expect(json.data[0].meta.copyright).equal("Sandro Munda");
+      expect(json.data[1].meta.copyright).equal("Lawrence Bennett");
       done(null, json);
     });
   });
@@ -897,7 +933,7 @@ describe('JSON API Serializer', function () {
         firstName: 'Lawrence',
         lastName: 'Bennett',
         address: {
-          id: '54735697e16624ba1eee36bf',
+          id: 123,
           addressLine1: '361 Shady Lane',
           zipCode: '23185',
           country: 'USA'
@@ -933,6 +969,9 @@ describe('JSON API Serializer', function () {
         id: '54735722e16620ba1eee36af',
         type: 'addresses'
       });
+
+      expect(json.included[1]).to.have.property('id')
+        .equal('123');
 
       done(null, json);
     });
@@ -2499,6 +2538,89 @@ describe('JSON API Serializer', function () {
         });
 
       done(null, json);
+    });
+  });
+
+  describe('relationshipLinks', function () {
+    it('should set the relationshipLinks parameter when the nullIfMissing is used', function () {
+      var dataSet = {
+        id: '1',
+        firstName: 'Sandro',
+        lastName: 'Munda',
+        books: [{
+          id: '1',
+          createdAt: '2015-08-04T06:09:24.864Z',
+          publisher: {
+            id: '1',
+            name: 'hachette'
+          }
+        }, {
+          id: '2',
+          createdAt: '2015-08-04T07:09:24.864Z'
+        }]
+      };
+
+      var json = new JSONAPISerializer('users', {
+        topLevelLinks: {
+          self: 'http://localhost:3000/api/users'
+        },
+        attributes: ['firstName', 'lastName', 'books'],
+        books: {
+          ref: 'id',
+          attributes: ['createdAt', 'publisher'],
+          relationshipLinks: {
+            related: 'foo'
+          },
+          publisher: {
+            ref: 'id',
+            attributes: ['name'],
+            nullIfMissing: true,
+            relationshipLinks: {
+              related: 'bar'
+            },
+          }
+        }
+      }).serialize(dataSet);
+
+      expect(json.included).eql([{
+        type: 'publishers',
+        id: '1',
+        attributes: { name: 'hachette' }
+      }, {
+        type: 'books',
+        id: '1',
+        attributes: { 'created-at': '2015-08-04T06:09:24.864Z' },
+        relationships: { publisher: { data: { type: 'publishers', id: '1' }, links: { related: 'bar' } } }
+      }, {
+        type: 'books',
+        id: '2',
+        attributes: { 'created-at': '2015-08-04T07:09:24.864Z' },
+        relationships: { publisher: { data: null, links: { related: 'bar' } } }
+      }]);
+    });
+
+    it('should not be set when the relationshipLinks return null', function () {
+      var dataSet = {
+        id: '54735750e16638ba1eee59cb',
+        firstName: 'Sandro',
+        lastName: 'Munda',
+        address: null,
+      };
+
+      var json = new JSONAPISerializer('users', {
+        attributes: ['firstName', 'lastName', 'address'],
+        address: {
+          ref: 'id',
+          included: false,
+          relationshipLinks: {
+            related: function () {
+              return null;
+            }
+          },
+        }
+      }).serialize(dataSet);
+
+      expect(json.data.relationships.address).eql({ data: null });
     });
   });
 });
